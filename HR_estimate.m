@@ -1,4 +1,4 @@
-function HR_estimate(y, frame_rate)
+function HR = HR_estimate(y, frame_rate)
     
     % Band-pass FIR filter (zero-phase distortion)
     HR_hp = 0.667; HR_lp = 3.833;                       % range of interest [Hz]
@@ -7,15 +7,14 @@ function HR_estimate(y, frame_rate)
     y = p; raw_data = p;
 
     % Windowing
-    window_length = 6;                                  % window length [s]
+    window_length = 5;                                  % window length [s]
     shift_time = 0.5;                                   % time between consecutive estimates [s]
     num_fpw = round(window_length * frame_rate);        % integer number of frames per window [frames]
     num_fps = round(shift_time * frame_rate);           % integer number of frames in shit_time [frames]
     
     num_iter = floor((size(y, 2) - num_fpw) / num_fps);
     
-    bpm = [];
-    bpm_smooth = [];
+    bpm = []; bpm_smooth = [];
     tmin_bpm = 50; tmax_bpm = 100; 
 
     % Processing for each window
@@ -29,6 +28,12 @@ function HR_estimate(y, frame_rate)
         low_limit = floor(HR_hp * (size(y, 2) / frame_rate))+1; 
         upper_limit = ceil(HR_lp * (size(y, 2) / frame_rate))+1;
         roi = low_limit:upper_limit;
+        
+        % Absolute Peak finding
+        [lm, lm_posix] = findpeaks(F_transform(roi));
+        [abs_max, am_posix] = max(lm);
+        max_f_index = roi(lm_posix(am_posix));
+        bpm(i) = (max_f_index-1) * (frame_rate / size(y, 2)) * 60;
 
         % SUBPLOT #1 - Power Spectral Density (PSD)for each window
         figure(1);
@@ -36,17 +41,10 @@ function HR_estimate(y, frame_rate)
         hold off;
         
         fft_plot = plot((roi-1) * (frame_rate / size(y, 2)) * 60, F_transform(roi), 'b');
-        hold on;    
+        hold on;
         axis([HR_hp*60 HR_lp*60 0 1]);
         grid on;
         xlabel('Heart Rate (BPM)'); ylabel('PSD');
-
-        % Absolute Peak finding
-        [lm, lm_posix] = findpeaks(F_transform(roi));
-        [abs_max, am_posix] = max(lm);
-        plot(am_posix, abs_max, 'ro');
-        max_f_index = roi(lm_posix(am_posix));
-        bpm(i) = (max_f_index-1) * (frame_rate / size(y, 2)) * 60;
 
         f_res = 1 / window_length;
         lowf = bpm(i) / 60 - 0.5 * f_res;
@@ -79,5 +77,6 @@ function HR_estimate(y, frame_rate)
         pause(shift_time/4);
 
     end
-    disp(['Estimated smooth HR: ' num2str(mean(bpm)) ' bpm']);
+    HR = mean(bpm_smooth);
+    h = msgbox(sprintf('Estimated HR: %f', HR));
 end
